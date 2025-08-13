@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电子备忘录 - 支持用户系统和Neon数据库</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        dark: '#1F2937',
+                        light: '#F3F4F6'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .transition-height {
+                transition: max-height 0.3s ease-out;
+            }
+            .card-hover {
+                transition: all 0.3s ease;
+            }
+            .card-hover:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- 导航栏 -->
+    <nav id="navbar" class="bg-white shadow-md fixed w-full top-0 z-50 transition-all duration-300">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-sticky-note-o text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-dark">电子备忘录</h1>
+            </div>
+            <div id="auth-buttons" class="flex space-x-3">
+                <button id="login-btn" class="px-4 py-2 rounded-md text-primary border border-primary hover:bg-primary/5 transition">登录</button>
+                <button id="register-btn" class="px-4 py-2 rounded-md bg-primary text-white hover:bg-primary/90 transition">注册</button>
+            </div>
+            <div id="user-menu" class="hidden flex items-center space-x-4">
+                <span id="username-display" class="text-gray-700"></span>
+                <button id="logout-btn" class="text-gray-500 hover:text-red-500 transition">
+                    <i class="fa fa-sign-out"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主容器 -->
+    <div class="container mx-auto px-4 pt-24 pb-16 min-h-screen">
+        <!-- 认证模态框 -->
+        <div id="auth-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden transform transition-all">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 id="modal-title" class="text-2xl font-bold text-dark">登录</h2>
+                        <button id="close-modal" class="text-gray-400 hover:text-gray-600">
+                            <i class="fa fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <form id="auth-form" class="space-y-4">
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                            <input type="email" id="email" name="email" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                        </div>
+                        
+                        <div>
+                            <label for="password" class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                            <input type="password" id="password" name="password" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                        </div>
+                        
+                        <div id="name-field" class="hidden">
+                            <label for="name" class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                            <input type="text" id="name" name="name" 
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                        </div>
+                        
+                        <button type="submit" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition font-medium">
+                            <span id="submit-text">登录</span>
+                        </button>
+                    </form>
+                    
+                    <div class="mt-4 text-center">
+                        <span id="toggle-text" class="text-gray-600">
+                            还没有账号？<button id="toggle-auth" class="text-primary hover:underline">注册</button>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据库配置模态框 -->
+        <div id="db-config-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden transform transition-all">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-dark">Neon数据库配置</h2>
+                        <button id="close-db-modal" class="text-gray-400 hover:text-gray-600">
+                            <i class="fa fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <form id="db-config-form" class="space-y-4">
+                        <div>
+                            <label for="db-url" class="block text-sm font-medium text-gray-700 mb-1">数据库连接URL</label>
+                            <input type="text" id="db-url" name="db-url" required
+                                placeholder="postgresql://user:password@host:port/dbname"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                            <p class="text-xs text-gray-500 mt-1">从Neon控制台获取你的连接URL</p>
+                        </div>
+                        
+                        <button type="submit" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition font-medium">
+                            保存配置
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 未登录状态提示 -->
+        <div id="unauthenticated-message" class="py-16 text-center">
+            <i class="fa fa-lock text-6xl text-gray-300 mb-4"></i>
+            <h2 class="text-2xl font-bold text-gray-700 mb-2">请先登录</h2>
+            <p class="text-gray-500 mb-6">登录后即可使用备忘录功能</p>
+            <button id="login-prompt-btn" class="px-6 py-3 bg-primary text-white rounded-md hover:bg-primary/90 transition font-medium">
+                立即登录
+            </button>
+        </div>
+
+        <!-- 备忘录功能区 -->
+        <div id="notebook-section" class="hidden">
+            <!-- 数据库配置提示 -->
+            <div id="db-config-prompt" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 hidden">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fa fa-info-circle text-yellow-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">
+                            尚未配置Neon数据库连接。请完成配置以保存你的备忘录。
+                        </p>
+                    </div>
+                    <div class="ml-auto pl-3">
+                        <button id="configure-db-btn" class="inline-flex text-yellow-500 hover:text-yellow-700 focus:outline-none">
+                            <span class="sr-only">关闭</span>
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 添加备忘录区域 -->
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <h2 class="text-xl font-bold text-dark mb-4">添加新备忘录</h2>
+                <form id="note-form" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="note-title" class="block text-sm font-medium text-gray-700 mb-1">标题</label>
+                            <input type="text" id="note-title" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                        </div>
+                        <div>
+                            <label for="note-category" class="block text-sm font-medium text-gray-700 mb-1">分类标签</label>
+                            <input type="text" id="note-category" placeholder="用逗号分隔多个标签"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="note-content" class="block text-sm font-medium text-gray-700 mb-1">内容</label>
+                        <textarea id="note-content" rows="3" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition"></textarea>
+                    </div>
+                    
+                    <div>
+                        <label for="note-reminder" class="block text-sm font-medium text-gray-700 mb-1">提醒时间 (可选)</label>
+                        <input type="datetime-local" id="note-reminder"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                    </div>
+                    
+                    <div class="flex justify-end">
+                        <button type="submit" class="px-6 py-2 bg-secondary text-white rounded-md hover:bg-secondary/90 transition flex items-center">
+                            <i class="fa fa-plus mr-2"></i> 添加备忘录
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 搜索和筛选区域 -->
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="relative">
+                        <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" id="search-notes" placeholder="搜索标题或内容..."
+                            class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition">
+                    </div>
+                    
+                    <div>
+                        <label for="filter-category" class="block text-sm font-medium text-gray-700 mb-1">按标签筛选</label>
+                        <select id="filter-category"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition appearance-none bg-white">
+                            <option value="">所有标签</option>
+                            <!-- 标签选项会通过JavaScript动态添加 -->
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label for="sort-notes" class="block text-sm font-medium text-gray-700 mb-1">排序方式</label>
+                        <select id="sort-notes"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary transition appearance-none bg-white">
+                            <option value="newest">最新添加</option>
+                            <option value="oldest">最早添加</option>
+                            <option value="title-asc">标题 (A-Z)</option>
+                            <option value="title-desc">标题 (Z-A)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 备忘录列表 -->
+            <div>
+                <h2 class="text-xl font-bold text-dark mb-4 flex items-center">
+                    <i class="fa fa-list-ul mr-2 text-primary"></i> 我的备忘录
+                    <span id="note-count" class="ml-2 text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded-full">0</span>
+                </h2>
+                
+                <div id="notes-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- 备忘录会通过JavaScript动态添加 -->
+                </div>
+                
+                <div id="no-notes-message" class="py-16 text-center hidden">
+                    <i class="fa fa-file-o text-6xl text-gray-300 mb-4"></i>
+                    <h3 class="text-xl font-medium text-gray-700">暂无备忘录</h3>
+                    <p class="text-gray-500 mt-2">添加你的第一条备忘录吧！</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-6">
+        <div class="container mx-auto px-4 text-center">
+            <p>© 2023 电子备忘录 | 支持Neon数据库</p>
+            <p class="text-sm text-gray-400 mt-2">使用现代Web技术构建</p>
+        </div>
+    </footer>
+
+    <script>
+        // 全局状态管理
+        const state = {
+            isAuthenticated: false,
+            currentUser: null,
+            notes: [],
+            dbConfigured: false,
+            dbUrl: null,
+            authMode: 'login' // 'login' 或 'register'
+        };
+
+        // DOM 元素
+        const elements = {
+            // 导航栏元素
+            navbar: document.getElementById('navbar'),
+            authButtons: document.getElementById('auth-buttons'),
+            userMenu: document.getElementById('user-menu'),
+            usernameDisplay: document.getElementById('username-display'),
+            loginBtn: document.getElementById('login-btn'),
+            registerBtn: document.getElementById('register-btn'),
+            logoutBtn: document.getElementById('logout-btn'),
+            
+            // 认证模态框元素
+            authModal: document.getElementById('auth-modal'),
+            modalTitle: document.getElementById('modal-title'),
+            closeModal: document.getElementById('close-modal'),
+            authForm: document.getElementById('auth-form'),
+            emailInput: document.getElementById('email'),
+            passwordInput: document.getElementById('password'),
+            nameInput: document.getElementById('name'),
+            nameField: document.getElementById('name-field'),
+            submitText: document.getElementById('submit-text'),
+            toggleText: document.getElementById('toggle-text'),
+            toggleAuth: document.getElementById('toggle-auth'),
+            loginPromptBtn: document.getElementById('login-prompt-btn'),
+            
+            // 数据库配置模态框
+            dbConfigModal: document.getElementById('db-config-modal'),
+            closeDbModal: document.getElementById('close-db-modal'),
+            dbConfigForm: document.getElementById('db-config-form'),
+            dbUrlInput: document.getElementById('db-url'),
+            dbConfigPrompt: document.getElementById('db-config-prompt'),
+            configureDbBtn: document.getElementById('configure-db-btn'),
+            
+            // 备忘录区域
+            unauthenticatedMessage: document.getElementById('unauthenticated-message'),
+            notebookSection: document.getElementById('notebook-section'),
+            noteForm: document.getElementById('note-form'),
+            noteTitle: document.getElementById('note-title'),
+            noteContent: document.getElementById('note-content'),
+            noteCategory: document.getElementById('note-category'),
+            noteReminder: document.getElementById('note-reminder'),
+            searchNotes: document.getElementById('search-notes'),
+            filterCategory: document.getElementById('filter-category'),
+            sortNotes: document.getElementById('sort-notes'),
+            notesContainer: document.getElementById('notes-container'),
+            noNotesMessage: document.getElementById('no-notes-message'),
+            noteCount: document.getElementById('note-count')
+        };
+
+        // 初始化应用
+        function initApp() {
+            // 检查本地存储中的用户状态
+            const savedUser = localStorage.getItem('currentUser');
+            const savedDbUrl = localStorage.getItem('neonDbUrl');
+            
+            if (savedUser) {
+                state.currentUser = JSON.parse(savedUser);
+                state.isAuthenticated = true;
+            }
+            
+            if (savedDbUrl) {
+                state.dbUrl = savedDbUrl;
+                state.dbConfigured = true;
+                elements.dbUrlInput.value = savedDbUrl;
+            }
+            
+            // 更新UI状态
+            updateAuthUI();
+            
+            // 如果已登录，加载备忘录
+            if (state.isAuthenticated) {
+                if (state.dbConfigured) {
+                    fetchNotes();
+                } else {
+                    elements.dbConfigPrompt.classList.remove('hidden');
+                }
+            }
+            
+            // 绑定事件监听器
+            bindEvents();
+        }
+
+        // 绑定事件监听器
+        function bindEvents() {
+            // 导航栏事件
+            elements.loginBtn.addEventListener('click', openLoginModal);
+            elements.registerBtn.addEventListener('click', openRegisterModal);
+            elements.logoutBtn.addEventListener('click', logout);
+            elements.loginPromptBtn.addEventListener('click', openLoginModal);
+            
+            // 认证模态框事件
+            elements.closeModal.addEventListener('click', closeAuthModal);
+            elements.authForm.addEventListener('submit', handleAuthSubmit);
+            elements.toggleAuth.addEventListener('click', toggleAuthMode);
+            
+            // 数据库配置事件
+            elements.configureDbBtn.addEventListener('click', openDbConfigModal);
+            elements.closeDbModal.addEventListener('click', closeDbConfigModal);
+            elements.dbConfigForm.addEventListener('submit', handleDbConfigSubmit);
+            
+            // 备忘录事件
+            elements.noteForm.addEventListener('submit', handleNoteSubmit);
+            elements.searchNotes.addEventListener('input', filterNotes);
+            elements.filterCategory.addEventListener('change', filterNotes);
+            elements.sortNotes.addEventListener('change', filterNotes);
+            
+            // 滚动事件 - 导航栏效果
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 10) {
+                    elements.navbar.classList.add('py-2', 'shadow-lg');
+                    elements.navbar.classList.remove('py-3', 'shadow-md');
+                } else {
+                    elements.navbar.classList.add('py-3', 'shadow-md');
+                    elements.navbar.classList.remove('py-2', 'shadow-lg');
+                }
+            });
+        }
+
+        // 认证相关函数
+        function openLoginModal() {
+            state.authMode = 'login';
+            updateAuthModalUI();
+            elements.authModal.classList.remove('hidden');
+            elements.authModal.classList.add('flex');
+            elements.emailInput.focus();
+        }
+
+        function openRegisterModal() {
+            state.authMode = 'register';
+            updateAuthModalUI();
+            elements.authModal.classList.remove('hidden');
+            elements.authModal.classList.add('flex');
+            elements.emailInput.focus();
+        }
+
+        function closeAuthModal() {
+            elements.authModal.classList.add('hidden');
+            elements.authModal.classList.remove('flex');
+            elements.authForm.reset();
+        }
+
+        function toggleAuthMode() {
+            state.authMode = state.authMode === 'login' ? 'register' : 'login';
+            updateAuthModalUI();
+        }
+
+        function updateAuthModalUI() {
+            if (state.authMode === 'login') {
+                elements.modalTitle.textContent = '登录';
+                elements.submitText.textContent = '登录';
+                elements.nameField.classList.add('hidden');
+                elements.toggleText.innerHTML = '还没有账号？<button id="toggle-auth" class="text-primary hover:underline">注册</button>';
+                // 重新绑定事件，因为innerHTML会移除事件监听
+                elements.toggleAuth = document.getElementById('toggle-auth');
+                elements.toggleAuth.addEventListener('click', toggleAuthMode);
+            } else {
+                elements.modalTitle.textContent = '注册';
+                elements.submitText.textContent = '注册';
+                elements.nameField.classList.remove('hidden');
+                elements.toggleText.innerHTML = '已有账号？<button id="toggle-auth" class="text-primary hover:underline">登录</button>';
+                // 重新绑定事件
+                elements.toggleAuth = document.getElementById('toggle-auth');
+                elements.toggleAuth.addEventListener('click', toggleAuthMode);
+            }
+        }
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            
+            const email = elements.emailInput.value.trim();
+            const password = elements.passwordInput.value.trim();
+            const name = state.authMode === 'register' ? elements.nameInput.value.trim() : '';
+            
+            try {
+                if (state.authMode === 'login') {
+                    // 实际应用中这里应该调用后端API进行验证
+                    // 这里为了演示，使用简单的本地验证
+                    const users = JSON.parse(localStorage.getItem('users') || '[]');
+                    const user = users.find(u => u.email === email && u.password === password);
+                    
+                    if (user) {
+                        state.currentUser = user;
+                        state.isAuthenticated = true;
+                        localStorage.setItem('currentUser', JSON.stringify(user));
+                        closeAuthModal();
+                        updateAuthUI();
+                        if (state.dbConfigured) {
+                            fetchNotes();
+                        } else {
+                            elements.dbConfigPrompt.classList.remove('hidden');
+                        }
+                        showToast('登录成功！');
+                    } else {
+                        showToast('邮箱或密码错误', 'error');
+                    }
+                } else {
+                    // 注册新用户
+                    const users = JSON.parse(localStorage.getItem('users') || '[]');
+                    const userExists = users.some(u => u.email === email);
+                    
+                    if (userExists) {
+                        showToast('该邮箱已被注册', 'error');
+                        return;
+                    }
+                    
+                    if (!name) {
+                        showToast('请输入用户名', 'error');
+                        return;
+                    }
+                    
+                    const newUser = {
+                        id: Date.now().toString(),
+                        name,
+                        email,
+                        password // 实际应用中应该加密存储密码
+                    };
+                    
+                    users.push(newUser);
+                    localStorage.setItem('users', JSON.stringify(users));
+                    
+                    // 自动登录新用户
+                    state.currentUser = newUser;
+                    state.isAuthenticated = true;
+                    localStorage.setItem('currentUser', JSON.stringify(newUser));
+                    closeAuthModal();
+                    updateAuthUI();
+                    showToast('注册成功！');
+                }
+            } catch (error) {
+                console.error('认证错误:', error);
+                showToast('操作失败，请重试', 'error');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('currentUser');
+            state.currentUser = null;
+            state.isAuthenticated = false;
+            state.notes = [];
+            updateAuthUI();
+            showToast('已退出登录');
+        }
+
+        function updateAuthUI() {
+            if (state.isAuthenticated && state.currentUser) {
+                elements.authButtons.classList.add('hidden');
+                elements.userMenu.classList.remove('hidden');
+                elements.usernameDisplay.textContent = state.currentUser.name;
+                elements.unauthenticatedMessage.classList.add('hidden');
+                elements.notebookSection.classList.remove('hidden');
+            } else {
+                elements.authButtons.classList.remove('hidden');
+                elements.userMenu.classList.add('hidden');
+                elements.unauthenticatedMessage.classList.remove('hidden');
+                elements.notebookSection.classList.add('hidden');
+                elements.notesContainer.innerHTML = '';
+            }
+        }
+
+        // 数据库配置相关函数
+        function openDbConfigModal() {
+            elements.dbConfigModal.classList.remove('hidden');
+            elements.dbConfigModal.classList.add('flex');
+            elements.dbUrlInput.focus();
+        }
+
+        function closeDbConfigModal() {
+            elements.dbConfigModal.classList.add('hidden');
+            elements.dbConfigModal.classList.remove('flex');
+        }
+
+        function handleDbConfigSubmit(e) {
+            e.preventDefault();
+            
+            const dbUrl = elements.dbUrlInput.value.trim();
+            
+            if (!dbUrl) {
+                showToast('请输入数据库连接URL', 'error');
+                return;
+            }
+            
+            try {
+                // 保存数据库配置
+                localStorage.setItem('neonDbUrl', dbUrl);
+                state.dbUrl = dbUrl;
+                state.dbConfigured = true;
+                
+                closeDbConfigModal();
+                elements.dbConfigPrompt.classList.add('hidden');
+                
+                // 如果已登录，加载备忘录
+                if (state.isAuthenticated) {
+                    fetchNotes();
+                }
+                
+                showToast('数据库配置保存成功');
+            } catch (error) {
+                console.error('数据库配置错误:', error);
+                showToast('配置保存失败，请重试', 'error');
+            }
+        }
+
+        // 备忘录相关函数
+        async function handleNoteSubmit(e) {
+            e.preventDefault();
+            
+            if (!state.dbConfigured) {
+                showToast('请先配置Neon数据库连接', 'error');
+                openDbConfigModal();
+                return;
+            }
+            
+            const title = elements.noteTitle.value.trim();
+            const content = elements.noteContent.value.trim();
+            const category = elements.noteCategory.value.trim();
+            const reminder = elements.noteReminder.value;
+            
+            if (!title || !content) {
+                showToast('标题和内容不能为空', 'error');
+                return;
+            }
+            
+            try {
+                const newNote = {
+                    id: Date.now().toString(),
+                    userId: state.currentUser.id,
+                    title,
+                    content,
+                    category: category ? category.split(',').map(c => c.trim()) : [],
+                    reminder: reminder || null,
+                    createdAt: new Date().toISOString()
+                };
+                
+                // 实际应用中这里应该发送到后端API，再由后端写入Neon数据库
+                // 这里使用模拟API调用
+                await simulateDbOperation('POST', newNote);
+                
+                // 添加到本地列表并刷新UI
+                state.notes.unshift(newNote);
+                elements.noteForm.reset();
+                renderNotes();
+                updateCategoryFilter();
+                showToast('备忘录添加成功');
+            } catch (error) {
+                console.error('添加备忘录错误:', error);
+                showToast('添加失败，请重试', 'error');
+            }
+        }
+
+        async function fetchNotes() {
+            try {
+                // 模拟从Neon数据库获取数据
+                const notes = await simulateDbOperation('GET');
+                state.notes = notes.filter(note => note.userId === state.currentUser.id);
+                renderNotes();
+                updateCategoryFilter();
+            } catch (error) {
+                console.error('获取备忘录错误:', error);
+                showToast('获取备忘录失败', 'error');
+            }
+        }
+
+        async function deleteNote(id) {
+            if (!confirm('确定要删除这条备忘录吗？')) {
+                return;
+            }
+            
+            try {
+                // 模拟删除操作
+                await simulateDbOperation('DELETE', { id, userId: state.currentUser.id });
+                
+                // 从本地列表中移除并刷新UI
+                state.notes = state.notes.filter(note => note.id !== id);
+                renderNotes();
+                updateCategoryFilter();
+                showToast('备忘录已删除');
+            } catch (error) {
+                console.error('删除备忘录错误:', error);
+                showToast('删除失败，请重试', 'error');
+            }
+        }
+
+        function renderNotes() {
+            // 应用筛选和排序
+            const filteredNotes = applyFiltersAndSort();
+            
+            if (filteredNotes.length === 0) {
+                elements.notesContainer.innerHTML = '';
+                elements.noNotesMessage.classList.remove('hidden');
+                elements.noteCount.textContent = '0';
+                return;
+            }
+            
+            elements.noNotesMessage.classList.add('hidden');
+            elements.noteCount.textContent = filteredNotes.length;
+            elements.notesContainer.innerHTML = '';
+            
+            filteredNotes.forEach(note => {
+                const noteElement = createNoteElement(note);
+                elements.notesContainer.appendChild(noteElement);
+            });
+        }
+
+        function createNoteElement(note) {
+            const noteCard = document.createElement('div');
+            noteCard.className = 'bg-white rounded-xl shadow-md overflow-hidden card-hover';
+            
+            // 格式化日期
+            const createdAt = new Date(note.createdAt);
+            const formattedDate = createdAt.toLocaleString();
+            
+            // 构建标签HTML
+            const categoriesHtml = note.category.length 
+                ? note.category.map(cat => `<span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full mr-1 mb-1">${cat}</span>`).join('')
+                : '<span class="text-gray-400 text-xs">无标签</span>';
+            
+            // 处理提醒时间
+            const reminderHtml = note.reminder 
+                ? `<div class="flex items-center text-sm text-amber-600 mt-2">
+                     <i class="fa fa-bell-o mr-1"></i>
+                     <span>提醒: ${new Date(note.reminder).toLocaleString()}</span>
+                   </div>`
+                : '';
+            
+            // 处理搜索高亮
+            const searchTerm = elements.searchNotes.value.trim().toLowerCase();
+            let title = note.title;
+            let content = note.content;
+            
+            if (searchTerm) {
+                const regex = new RegExp(`(${searchTerm})`, 'gi');
+                title = title.replace(regex, '<span class="bg-yellow-200">$1</span>');
+                content = content.replace(regex, '<span class="bg-yellow-200">$1</span>');
+            }
+            
+            noteCard.innerHTML = `
+                <div class="p-5">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-bold text-lg text-gray-800">${title}</h3>
+                        <button class="delete-note text-gray-400 hover:text-red-500 transition" data-id="${note.id}">
+                            <i class="fa fa-trash-o"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="text-gray-600 mb-3">${content}</div>
+                    
+                    <div class="mb-2">${categoriesHtml}</div>
+                    
+                    ${reminderHtml}
+                    
+                    <div class="text-xs text-gray-400 mt-3">
+                        创建于: ${formattedDate}
+                    </div>
+                </div>
+            `;
+            
+            // 添加删除事件
+            noteCard.querySelector('.delete-note').addEventListener('click', () => {
+                deleteNote(note.id);
+            });
+            
+            return noteCard;
+        }
+
+        function updateCategoryFilter() {
+            // 收集所有唯一标签
+            const allCategories = new Set();
+            
+            state.notes.forEach(note => {
+                note.category.forEach(cat => {
+                    if (cat) allCategories.add(cat);
+                });
+            });
+            
+            // 保存当前选中的标签
+            const currentValue = elements.filterCategory.value;
+            
+            // 清除现有选项（保留"所有标签"）
+            while (elements.filterCategory.options.length > 1) {
+                elements.filterCategory.remove(1);
+            }
+            
+            // 添加新的标签选项
+            Array.from(allCategories).sort().forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                elements.filterCategory.appendChild(option);
+            });
+            
+            // 恢复选中状态
+            if (currentValue && allCategories.has(currentValue)) {
+                elements.filterCategory.value = currentValue;
+            }
+        }
+
+        function applyFiltersAndSort() {
+            const searchTerm = elements.searchNotes.value.trim().toLowerCase();
+            const categoryFilter = elements.filterCategory.value;
+            const sortOption = elements.sortNotes.value;
+            
+            // 应用搜索筛选
+            let filtered = state.notes.filter(note => {
+                const matchesSearch = searchTerm === '' || 
+                    note.title.toLowerCase().includes(searchTerm) || 
+                    note.content.toLowerCase().includes(searchTerm);
+                
+                const matchesCategory = categoryFilter === '' || 
+                    note.category.includes(categoryFilter);
+                
+                return matchesSearch && matchesCategory;
+            });
+            
+            // 应用排序
+            filtered.sort((a, b) => {
+                switch (sortOption) {
+                    case 'newest':
+                        return new Date(b.createdAt) - new Date(a.createdAt);
+                    case 'oldest':
+                        return new Date(a.createdAt) - new Date(b.createdAt);
+                    case 'title-asc':
+                        return a.title.localeCompare(b.title);
+                    case 'title-desc':
+                        return b.title.localeCompare(a.title);
+                    default:
+                        return 0;
+                }
+            });
+            
+            return filtered;
+        }
+
+        function filterNotes() {
+            renderNotes();
+        }
+
+        // 模拟数据库操作（实际应用中应替换为真实API调用）
+        async function simulateDbOperation(method, data = null) {
+            // 从本地存储获取模拟的"数据库"数据
+            let dbNotes = JSON.parse(localStorage.getItem('simulatedNeonDb') || '[]');
+            
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    try {
+                        switch (method) {
+                            case 'GET':
+                                // 获取所有备忘录
+                                resolve([...dbNotes]);
+                                break;
+                                
+                            case 'POST':
+                                // 添加新备忘录
+                                dbNotes.push(data);
+                                localStorage.setItem('simulatedNeonDb', JSON.stringify(dbNotes));
+                                resolve(data);
+                                break;
+                                
+                            case 'DELETE':
+                                // 删除备忘录
+                                dbNotes = dbNotes.filter(note => !(note.id === data.id && note.userId === data.userId));
+                                localStorage.setItem('simulatedNeonDb', JSON.stringify(dbNotes));
+                                resolve(true);
+                                break;
+                                
+                            default:
+                                reject(new Error('不支持的操作'));
+                        }
+                    } catch (error) {
+                        reject(error);
+                    }
+                }, 500); // 模拟网络延迟
+            });
+        }
+
+        // 显示提示消息
+        function showToast(message, type = 'success') {
+            // 检查是否已有toast
+            let toast = document.querySelector('.toast-notification');
+            if (toast) {
+                toast.remove();
+            }
+            
+            // 创建新toast
+            toast = document.createElement('div');
+            toast.className = `toast-notification fixed bottom-4 right-4 px-4 py-3 rounded-md shadow-lg transform transition-all duration-300 z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+            }`;
+            
+            toast.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fa ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            // 显示toast
+            setTimeout(() => {
+                toast.classList.add('translate-y-0', 'opacity-100');
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            }, 10);
+            
+            // 3秒后隐藏
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // 初始化应用
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
