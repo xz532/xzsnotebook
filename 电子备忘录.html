@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电子记事本</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .app-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        input, textarea, select, button {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .note-item {
+            background-color: #fff;
+            border-left: 4px solid #4CAF50;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .note-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .note-content {
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .note-meta {
+            font-size: 0.8em;
+            color: #999;
+            display: flex;
+            justify-content: space-between;
+        }
+        .tag {
+            display: inline-block;
+            background-color: #e1f5fe;
+            color: #0288d1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-right: 5px;
+        }
+        .search-highlight {
+            background-color: yellow;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <h1>电子记事本</h1>
+        
+        <!-- 添加新备忘录表单 -->
+        <div class="controls">
+            <div class="control-group">
+                <input type="text" id="note-title" placeholder="标题">
+                <textarea id="note-content" placeholder="内容..."></textarea>
+            </div>
+            
+            <div class="control-group">
+                <label for="note-tags">分类标签 (用逗号分隔)</label>
+                <input type="text" id="note-tags" placeholder="工作, 个人, 重要">
+                
+                <label for="note-reminder">提醒时间</label>
+                <input type="datetime-local" id="note-reminder">
+                
+                <button id="add-note">添加备忘录</button>
+            </div>
+        </div>
+        
+        <!-- 搜索区域 -->
+        <div class="controls">
+            <div class="control-group">
+                <input type="text" id="search-input" placeholder="搜索备忘录...">
+                <button id="search-btn">搜索</button>
+            </div>
+            
+            <div class="control-group">
+                <label for="filter-tag">按标签筛选</label>
+                <select id="filter-tag">
+                    <option value="">所有标签</option>
+                    <option value="工作">工作</option>
+                    <option value="个人">个人</option>
+                    <option value="重要">重要</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- 备忘录列表 -->
+        <div id="notes-list">
+            <!-- 示例备忘录 -->
+            <div class="note-item">
+                <div class="note-title">示例备忘录</div>
+                <div class="note-content">这是一个示例备忘录内容，您可以编辑或删除它。</div>
+                <div class="note-meta">
+                    <div>
+                        <span class="tag">示例</span>
+                        <span class="tag">教程</span>
+                    </div>
+                    <div>提醒时间: 无</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 存储所有备忘录
+        let notes = [
+            {
+                id: 1,
+                title: "示例备忘录",
+                content: "这是一个示例备忘录内容，您可以编辑或删除它。",
+                tags: ["示例", "教程"],
+                reminder: null,
+                createdAt: new Date()
+            }
+        ];
+        
+        // DOM 元素
+        const notesList = document.getElementById('notes-list');
+        const addNoteBtn = document.getElementById('add-note');
+        const searchBtn = document.getElementById('search-btn');
+        const searchInput = document.getElementById('search-input');
+        const filterTag = document.getElementById('filter-tag');
+        
+        // 渲染备忘录列表
+        function renderNotes(notesToRender = notes) {
+            notesList.innerHTML = '';
+            
+            if (notesToRender.length === 0) {
+                notesList.innerHTML = '<p>没有找到备忘录</p>';
+                return;
+            }
+            
+            notesToRender.forEach(note => {
+                const noteElement = document.createElement('div');
+                noteElement.className = 'note-item';
+                noteElement.innerHTML = `
+                    <div class="note-title">${note.title}</div>
+                    <div class="note-content">${note.content}</div>
+                    <div class="note-meta">
+                        <div>
+                            ${note.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                        </div>
+                        <div>提醒时间: ${note.reminder ? new Date(note.reminder).toLocaleString() : '无'}</div>
+                    </div>
+                    <button onclick="deleteNote(${note.id})" style="background-color: #f44336; margin-top: 10px;">删除</button>
+                `;
+                notesList.appendChild(noteElement);
+            });
+        }
+        
+        // 添加新备忘录
+        addNoteBtn.addEventListener('click', () => {
+            const title = document.getElementById('note-title').value.trim();
+            const content = document.getElementById('note-content').value.trim();
+            const tagsInput = document.getElementById('note-tags').value.trim();
+            const reminder = document.getElementById('note-reminder').value;
+            
+            if (!title || !content) {
+                alert('标题和内容不能为空');
+                return;
+            }
+            
+            const tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()) : [];
+            
+            const newNote = {
+                id: Date.now(),
+                title,
+                content,
+                tags,
+                reminder: reminder ? new Date(reminder).getTime() : null,
+                createdAt: new Date()
+            };
+            
+            notes.push(newNote);
+            renderNotes();
+            
+            // 清空表单
+            document.getElementById('note-title').value = '';
+            document.getElementById('note-content').value = '';
+            document.getElementById('note-tags').value = '';
+            document.getElementById('note-reminder').value = '';
+        });
+        
+        // 搜索备忘录
+        searchBtn.addEventListener('click', searchNotes);
+        searchInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                searchNotes();
+            }
+        });
+        
+        function searchNotes() {
+            const searchTerm = searchInput.value.trim().toLowerCase();
+            const selectedTag = filterTag.value;
+            
+            let filteredNotes = notes;
+            
+            // 按标签筛选
+            if (selectedTag) {
+                filteredNotes = filteredNotes.filter(note => 
+                    note.tags.includes(selectedTag)
+                );
+            }
+            
+            // 按搜索词筛选
+            if (searchTerm) {
+                filteredNotes = filteredNotes.filter(note => 
+                    note.title.toLowerCase().includes(searchTerm) || 
+                    note.content.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            renderNotes(filteredNotes);
+            
+            // 高亮显示搜索词
+            if (searchTerm) {
+                highlightText(searchTerm);
+            }
+        }
+        
+        // 高亮显示搜索词
+        function highlightText(searchTerm) {
+            const noteContents = document.querySelectorAll('.note-title, .note-content');
+            
+            noteContents.forEach(element => {
+                const text = element.textContent;
+                const highlightedText = text.replace(
+                    new RegExp(searchTerm, 'gi'),
+                    match => `<span class="search-highlight">${match}</span>`
+                );
+                element.innerHTML = highlightedText;
+            });
+        }
+        
+        // 删除备忘录
+        window.deleteNote = function(id) {
+            notes = notes.filter(note => note.id !== id);
+            renderNotes();
+        }
+        
+        // 标签筛选
+        filterTag.addEventListener('change', searchNotes);
+        
+        // 初始渲染
+        renderNotes();
+    </script>
+</body>
+</html>
